@@ -29,6 +29,22 @@ una-poc fetch --pages 10,11,12 --page-size 10 --limit 6 --output data/poc
 una-poc detect --manifest data/poc/manifest.json --model yolo11n.pt --output data/poc/yolo
 ```
 
+The CLI provides four commands:
+
+```powershell
+# Download images from specific FathomNet API pages.
+una-poc fetch --pages 10,11,12 --page-size 10 --limit 6 --output data/poc
+
+# Download images from a deterministic random sample of API pages.
+una-poc fetch-random --seed 42 --page-count 8 --page-size 10 --limit 6 --output data/poc-random
+
+# Run YOLO and flag detections that do not overlap existing annotations.
+una-poc detect --manifest data/poc/manifest.json --model yolo11n.pt --output data/poc/yolo
+
+# Refine YOLO candidate boxes with SAM 3.
+una-poc segment --manifest data/poc/manifest.json --detections data/poc/yolo/results.json --output data/poc/sam3
+```
+
 The default `yolo11n.pt` checkpoint is useful for verifying that the software pipeline works, but it is trained on generic COCO categories. It must not be treated as a valid marine-organism model. Research results should use a checkpoint fine-tuned or otherwise validated for the selected FathomNet categories:
 
 ```powershell
