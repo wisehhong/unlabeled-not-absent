@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import random
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from .sam3_runner import run_sam3
 from .sampling import build_manifest, collect_candidates, write_sample
 from .visualization import create_review_artifacts
 from .yolo_runner import run_yolo
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _pages(value: str) -> list[int]:
@@ -74,6 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _fetch(args: argparse.Namespace, pages: list[int]) -> int:
+    LOGGER.info(
+        "Fetch started: %d metadata pages, page size %d, image limit %d",
+        len(pages),
+        args.page_size,
+        args.limit,
+    )
     images, fetched_pages = collect_candidates(
         pages,
         page_size=args.page_size,
@@ -82,6 +91,7 @@ def _fetch(args: argparse.Namespace, pages: list[int]) -> int:
     )
     if not images:
         raise RuntimeError("No matching images found; try more pages or --habitat any")
+    LOGGER.info("Manifest: building metadata for %d images", len(images))
     manifest = build_manifest(
         images,
         pages=fetched_pages,
@@ -90,11 +100,13 @@ def _fetch(args: argparse.Namespace, pages: list[int]) -> int:
     )
     manifest_path = write_sample(manifest, args.output)
     create_review_artifacts(manifest, args.output)
+    LOGGER.info("Fetch complete: %d images written to %s", len(images), args.output)
     print(json.dumps({"images": len(images), "manifest": str(manifest_path), "pages": fetched_pages}, indent=2))
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = build_parser().parse_args(argv)
     if args.command == "fetch":
         return _fetch(args, args.pages)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import ssl
 import time
@@ -60,8 +61,24 @@ def image_suffix(url: str) -> str:
     return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp"} else ".jpg"
 
 
-def download_image(url: str, destination: Path) -> None:
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def download_image(
+    url: str,
+    destination: Path,
+    *,
+    expected_sha256: str | None = None,
+) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".part")
     temporary.write_bytes(_request(url, timeout=90))
+    if expected_sha256 and file_sha256(temporary) != expected_sha256.lower():
+        temporary.unlink()
+        raise FathomNetError(f"Downloaded image failed SHA-256 validation: {url}")
     temporary.replace(destination)

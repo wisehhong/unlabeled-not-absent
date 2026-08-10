@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _color(label: str) -> tuple[int, int, int]:
@@ -45,7 +48,10 @@ def create_review_artifacts(manifest: dict[str, Any], output_dir: Path) -> None:
     previews_dir = output_dir / "previews"
     previews_dir.mkdir(parents=True, exist_ok=True)
     thumbnails: list[tuple[Image.Image, str]] = []
-    for record in manifest["images"]:
+    records = manifest["images"]
+    total = len(records)
+    for index, record in enumerate(records, start=1):
+        LOGGER.info("Preview %d/%d: generating %s.jpg", index, total, record["uuid"])
         with Image.open(output_dir / record["local_file"]) as image:
             preview = draw_boxes(image, record["bounding_boxes"])
             preview.thumbnail((640, 400))
@@ -53,6 +59,7 @@ def create_review_artifacts(manifest: dict[str, Any], output_dir: Path) -> None:
             preview.save(preview_path, quality=90)
             evidence = ", ".join(record["habitat_review"]["heuristic_evidence"]) or "no benthic indicator"
             thumbnails.append((preview.copy(), f"{record['uuid'][:8]}  |  {evidence}"))
+    LOGGER.info("Preview generation complete: created %d previews", total)
 
     # this is not scalable. commenting out for now. we can add a flag to enable it if needed.
 

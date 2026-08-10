@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .fathomnet import API_URL, download_image, fetch_image_page, image_suffix
+from .fathomnet import API_URL, download_image, fetch_image_page, file_sha256, image_suffix
+
+LOGGER = logging.getLogger(__name__)
 
 # These labels are evidence that the frame is likely near the seafloor, not a
 # ground-truth habitat classifier. Every selected frame remains reviewable.
@@ -61,11 +64,19 @@ def collect_candidates(
     habitat: str,
     api_url: str = API_URL,
 ) -> tuple[list[dict[str, Any]], list[int]]:
+    pages = list(pages)
     selected: list[dict[str, Any]] = []
     fetched_pages: list[int] = []
-    for page in pages:
+    for page_index, page in enumerate(pages, start=1):
+        LOGGER.info("Metadata page %d/%d: downloading API page %d", page_index, len(pages), page)
         response = fetch_image_page(page, page_size, api_url=api_url)
         fetched_pages.append(page)
+        LOGGER.info(
+            "Metadata page %d/%d: received %d records",
+            page_index,
+            len(pages),
+            len(response["content"]),
+        )
         for image in response["content"]:
             evidence = benthic_evidence(image)
             if not is_usable(image):
@@ -74,7 +85,10 @@ def collect_candidates(
                 continue
             selected.append({**image, "_benthicEvidence": evidence})
             if len(selected) >= limit:
+                LOGGER.info("Metadata selection complete: selected %d/%d images", len(selected), limit)
                 return selected, fetched_pages
+        LOGGER.info("Metadata selection progress: selected %d/%d images", len(selected), limit)
+    LOGGER.info("Metadata selection complete: selected %d/%d images", len(selected), limit)
     return selected, fetched_pages
 
 
@@ -109,6 +123,7 @@ def build_manifest(
             {
                 "uuid": image["uuid"],
                 "source_url": image["url"],
+                "sha256": image.get("sha256"),
                 "local_file": f"images/{filename}",
                 "width": image["width"],
                 "height": image["height"],
@@ -142,10 +157,38 @@ def build_manifest(
 
 def write_sample(manifest: dict[str, Any], output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    for record in manifest["images"]:
+    records = manifest["images"]
+    total = len(records)
+    for index, record in enumerate(records, start=1):
         destination = output_dir / record["local_file"]
-        if not destination.exists():
-            download_image(record["source_url"], destination)
+        expected_sha256 = record.get("sha256")
+        if destination.exists() and expected_sha256:
+            if file_sha256(destination) == str(expected_sha256).lower():
+                LOGGER.info(
+                    "Image %d/%d: reusing %s (SHA-256 matched)",
+                    index,
+                    total,
+                    destination.name,
+                )
+                continue
+            LOGGER.warning(
+                "Image %d/%d: %s has a SHA-256 mismatch; downloading again",
+                index,
+                total,
+                destination.name,
+            )
+        elif destination.exists():
+            LOGGER.info("Image %d/%d: reusing %s (metadata has no SHA-256)", index, total, destination.name)
+            continue
+        else:
+            LOGGER.info("Image %d/%d: downloading %s", index, total, destination.name)
+        download_image(
+            record["source_url"],
+            destination,
+            expected_sha256=str(expected_sha256) if expected_sha256 else None,
+        )
+        LOGGER.info("Image %d/%d: downloaded and verified %s", index, total, destination.name)
     manifest_path = output_dir / "manifest.json"
+    LOGGER.info("Manifest: writing %s", manifest_path)
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest_path

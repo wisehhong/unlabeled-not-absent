@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -6,12 +7,13 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from unlabeled_not_absent.fathomnet import image_suffix
+from unlabeled_not_absent.fathomnet import FathomNetError, download_image, image_suffix
 from unlabeled_not_absent.sam3_runner import normalize_xywh
 from unlabeled_not_absent.sampling import (
     benthic_evidence,
     build_manifest,
     collect_candidates,
+    write_sample,
 )
 from unlabeled_not_absent.visualization import create_review_artifacts
 from unlabeled_not_absent.yolo_runner import (
@@ -48,6 +50,32 @@ class PrototypeTests(unittest.TestCase):
     def test_unknown_url_suffix_is_safe(self):
         self.assertEqual(image_suffix("https://example.test/image?id=1"), ".jpg")
         self.assertEqual(image_suffix("https://example.test/image.PNG?q=1"), ".png")
+
+    @patch("unlabeled_not_absent.fathomnet._request", return_value=b"downloaded image")
+    def test_download_image_verifies_sha256_before_replacing(self, request):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "sample.jpg"
+            expected = hashlib.sha256(b"downloaded image").hexdigest()
+            download_image(
+                "https://example.test/sample.jpg",
+                destination,
+                expected_sha256=expected,
+            )
+            self.assertEqual(destination.read_bytes(), b"downloaded image")
+            request.assert_called_once_with("https://example.test/sample.jpg", timeout=90)
+
+    @patch("unlabeled_not_absent.fathomnet._request", return_value=b"wrong image")
+    def test_download_image_rejects_sha256_mismatch(self, request):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "sample.jpg"
+            with self.assertRaises(FathomNetError):
+                download_image(
+                    "https://example.test/sample.jpg",
+                    destination,
+                    expected_sha256=hashlib.sha256(b"expected image").hexdigest(),
+                )
+            self.assertFalse(destination.exists())
+            self.assertFalse(destination.with_suffix(".jpg.part").exists())
 
     def test_box_iou_xywh(self):
         first = {"x": 0, "y": 0, "width": 10, "height": 10}
@@ -138,6 +166,49 @@ class PrototypeTests(unittest.TestCase):
         self.assertEqual([item["uuid"] for item in selected], ["two"])
         self.assertEqual(pages, [7])
 
+    @patch("unlabeled_not_absent.sampling.download_image")
+    def test_write_sample_reuses_image_when_sha256_matches(self, download):
+        payload = b"already downloaded"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image_path = root / "images" / "sample.jpg"
+            image_path.parent.mkdir()
+            image_path.write_bytes(payload)
+            manifest = {
+                "images": [{
+                    "uuid": "sample",
+                    "source_url": "https://example.test/sample.jpg",
+                    "local_file": "images/sample.jpg",
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                }]
+            }
+            with self.assertLogs("unlabeled_not_absent.sampling", level="INFO") as logs:
+                write_sample(manifest, root)
+            download.assert_not_called()
+            self.assertTrue(any("SHA-256 matched" in message for message in logs.output))
+
+    @patch("unlabeled_not_absent.sampling.download_image")
+    def test_write_sample_redownloads_image_when_sha256_mismatches(self, download):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image_path = root / "images" / "sample.jpg"
+            image_path.parent.mkdir()
+            image_path.write_bytes(b"corrupt")
+            manifest = {
+                "images": [{
+                    "uuid": "sample",
+                    "source_url": "https://example.test/sample.jpg",
+                    "local_file": "images/sample.jpg",
+                    "sha256": hashlib.sha256(b"expected").hexdigest(),
+                }]
+            }
+            write_sample(manifest, root)
+            download.assert_called_once_with(
+                "https://example.test/sample.jpg",
+                image_path,
+                expected_sha256=hashlib.sha256(b"expected").hexdigest(),
+            )
+
     def test_manifest_and_contact_sheet(self):
         image = self._image("sample", "sponge")
         image["_benthicEvidence"] = ["sponge"]
@@ -159,6 +230,7 @@ class PrototypeTests(unittest.TestCase):
             "width": 100,
             "height": 100,
             "valid": True,
+            "sha256": hashlib.sha256(uuid.encode()).hexdigest(),
             "boundingBoxes": [
                 {
                     "uuid": f"box-{uuid}",
