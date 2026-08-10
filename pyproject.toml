@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unlabeled-not-absent"
-version = "0.1.0"
-description = "Small FathomNet + SAM 3 proof of concept"
+version = "0.2.0"
+description = "FathomNet incomplete-annotation audit prototype with YOLO and SAM 3"
 readme = "PROTOTYPE.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,6 +13,9 @@ dependencies = [
   "numpy>=1.26",
   "Pillow>=10",
 ]
+
+[project.optional-dependencies]
+yolo = ["ultralytics>=8.3"]
 
 [project.scripts]
 una-poc = "unlabeled_not_absent.cli:main"

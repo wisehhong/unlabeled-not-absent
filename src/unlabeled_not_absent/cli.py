@@ -10,6 +10,7 @@ from pathlib import Path
 from .sam3_runner import run_sam3
 from .sampling import build_manifest, collect_candidates, write_sample
 from .visualization import create_review_artifacts
+from .yolo_runner import run_yolo
 
 
 def _pages(value: str) -> list[int]:
@@ -25,7 +26,7 @@ def _pages(value: str) -> list[int]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="una-poc",
-        description="Download a small FathomNet sample and refine existing boxes with SAM 3.",
+        description="Download FathomNet samples, run YOLO, and refine boxes with SAM 3.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -45,12 +46,30 @@ def build_parser() -> argparse.ArgumentParser:
     random_fetch.add_argument("--habitat", choices=("benthic", "any"), default="benthic")
     random_fetch.add_argument("--output", type=Path, default=Path("data/poc"))
 
+    detect = subparsers.add_parser("detect", help="run YOLO and flag unmatched review candidates")
+    detect.add_argument("--manifest", type=Path, default=Path("data/poc/manifest.json"))
+    detect.add_argument("--output", type=Path, default=Path("data/poc/yolo"))
+    detect.add_argument("--model", default="yolo11n.pt")
+    detect.add_argument("--confidence", type=float, default=0.25)
+    detect.add_argument("--nms-iou", type=float, default=0.7)
+    detect.add_argument("--overlap-iou", type=float, default=0.1)
+    detect.add_argument("--device")
+    detect.add_argument("--max-images", type=int)
+
     segment = subparsers.add_parser("segment", help="run optional SAM 3 box-prompt inference")
     segment.add_argument("--manifest", type=Path, default=Path("data/poc/manifest.json"))
     segment.add_argument("--output", type=Path, default=Path("data/poc/sam3"))
     segment.add_argument("--confidence", type=float, default=0.3)
     segment.add_argument("--max-images", type=int)
     segment.add_argument("--max-boxes-per-image", type=int)
+    segment.add_argument(
+        "--detections", type=Path, help="YOLO results.json; prompts candidates instead of existing boxes"
+    )
+    segment.add_argument(
+        "--include-overlaps",
+        action="store_true",
+        help="with --detections, prompt all detections instead of candidates only",
+    )
     return parser
 
 
@@ -92,8 +111,22 @@ def main(argv: list[str] | None = None) -> int:
             confidence_threshold=args.confidence,
             max_images=args.max_images,
             max_boxes_per_image=args.max_boxes_per_image,
+            detections_path=args.detections,
+            include_overlapping_detections=args.include_overlaps,
+        )
+        print(result_path)
+        return 0
+    if args.command == "detect":
+        result_path = run_yolo(
+            args.manifest,
+            output_dir=args.output,
+            model=args.model,
+            confidence_threshold=args.confidence,
+            nms_iou_threshold=args.nms_iou,
+            overlap_threshold=args.overlap_iou,
+            device=args.device,
+            max_images=args.max_images,
         )
         print(result_path)
         return 0
     raise AssertionError("unreachable")
-

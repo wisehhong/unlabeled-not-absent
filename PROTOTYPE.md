@@ -1,12 +1,14 @@
-# FathomNet + SAM 3 proof of concept
+# FathomNet + YOLO + SAM 3 proof of concept
 
 This prototype downloads a very small FathomNet sample, preserves its existing
-bounding-box annotations, creates a contact sheet for habitat review, and can
-optionally use each existing box as a positive visual prompt for SAM 3.
+bounding-box annotations, creates a contact sheet for habitat review, runs YOLO,
+and compares its predictions with the existing boxes. High-confidence detections
+with low class-agnostic overlap are written as possible missing-annotation
+candidates. Candidate boxes can optionally be used as positive visual prompts for
+SAM 3.
 
-It deliberately does **not** run YOLO or claim to find missing annotations yet.
-The first question is narrower: *can SAM 3 turn FathomNet boxes into useful,
-reviewable organism masks on a few likely benthic frames?*
+The prototype produces review candidates; it does **not** claim that unmatched
+YOLO detections prove annotations are missing.
 
 ## 1. Fetch six likely benthic frames
 
@@ -38,7 +40,53 @@ For a reproducible wider sample, use deterministic random pages:
 una-poc fetch-random --seed 42 --page-count 12 --limit 6 --output data/random-poc
 ```
 
-## 2. Optional: run SAM 3 on a CUDA machine
+## 2. Run YOLO
+
+Install the optional YOLO dependencies in the same environment:
+
+```powershell
+python -m pip install -e ".[yolo]"
+```
+
+Run a small smoke test with an Ultralytics checkpoint:
+
+```powershell
+una-poc detect `
+  --manifest data/poc/manifest.json `
+  --model yolo11n.pt `
+  --max-images 2 `
+  --output data/poc/yolo
+```
+
+Ultralytics downloads named checkpoints when they are not already available.
+The generic `yolo11n.pt` model is trained on COCO and is only appropriate for
+testing the pipeline. For research, pass a marine checkpoint fine-tuned or
+validated for the selected FathomNet categories.
+
+Useful controls include:
+
+- `--confidence`: minimum detector confidence; default `0.25`
+- `--nms-iou`: YOLO non-maximum-suppression IoU; default `0.7`
+- `--overlap-iou`: minimum class-agnostic overlap with any existing annotation;
+  detections below this value become review candidates; default `0.1`
+- `--device`: an Ultralytics device such as `cpu`, `0`, or `cuda:0`
+- `--max-images`: optional smoke-test limit
+
+The output directory contains:
+
+- `results.json`: checkpoint provenance, thresholds, predictions, maximum
+  annotation IoU, matched annotation identifiers, candidate status, and summary
+- `overlays/`: blue existing boxes, green overlapping detections, and red
+  missing-annotation candidates
+- `candidate_contact_sheet.jpg`: generated only when candidates exist
+
+The original `manifest.json` is not changed.
+
+YOLO support uses the third-party Ultralytics package. Review its current
+licensing terms before redistributing the combined software or using it
+commercially.
+
+## 3. Optional: refine YOLO candidates with SAM 3 on a CUDA machine
 
 Meta's official SAM 3 currently requires Python 3.12+, PyTorch 2.7+, a
 CUDA-compatible GPU, access to the gated checkpoint on Hugging Face, and Hugging
@@ -48,16 +96,20 @@ this project into that same environment, then run:
 ```powershell
 una-poc segment `
   --manifest data/poc/manifest.json `
+  --detections data/poc/yolo/results.json `
   --output data/poc/sam3 `
   --max-images 2 `
   --max-boxes-per-image 4
 ```
 
 Start with the limits shown: SAM 3 is an 848M-parameter model. The output includes
-one binary mask per successful box prompt, an overlay per image, and `results.json`
-with prompt coordinates, scores, mask areas, and provenance.
+one binary mask per successful candidate prompt, an overlay per image, and
+`results.json` with prompt coordinates, scores, mask areas, and provenance. When
+`--detections` is omitted, the original behavior remains available and existing
+FathomNet annotations are used as prompts. Add `--include-overlaps` to prompt all
+YOLO detections rather than unmatched candidates only.
 
-## 3. Verify the lightweight pipeline
+## 4. Verify the lightweight pipeline
 
 The downloader and coordinate/visualization logic can be tested without SAM 3:
 
@@ -70,14 +122,22 @@ python -m unittest discover -s tests -v
 - The benthic filter is a sampling aid, not habitat ground truth.
 - FathomNet boxes may be incomplete. They are prompts here, not proof that every
   organism is annotated.
+- A YOLO detection with low annotation overlap is a review candidate, not proof
+  that an annotation is missing.
+- YOLO/FathomNet overlap is class-agnostic because their label vocabularies may
+  differ. The IoU threshold is an explicit audit parameter, not ground truth.
+- Generic COCO weights do not validate marine-organism detection. Research claims
+  require an appropriate checkpoint and a held-out, manually audited subset.
 - A SAM mask is boundary refinement, not independent evidence of a missing label.
 - Per the project feedback, SAM 3 used labeled FathomNet data during training.
   Report that possible non-independence when interpreting results.
-- This prototype measures feasibility and produces examples. It does not yet
-  support claims about detection accuracy, missing-label yield, or class balance.
+- This prototype measures workflow feasibility and produces audit artifacts. It
+  does not by itself support claims about detection accuracy, missing-label yield,
+  or class balance.
 
 ## Primary references
 
 - [FathomNet Python client](https://github.com/fathomnet/fathomnet-py)
 - [FathomNet image API example](https://database.fathomnet.org/api/images?page=10&size=10)
+- [Ultralytics documentation](https://docs.ultralytics.com/)
 - [Meta's official SAM 3 repository](https://github.com/facebookresearch/sam3)

@@ -1,4 +1,3 @@
-"""FathomNet + SAM 3 proof-of-concept package."""
+"""FathomNet incomplete-annotation audit proof-of-concept package."""
 
-__version__ = "0.1.0"
-
+__version__ = "0.2.0"

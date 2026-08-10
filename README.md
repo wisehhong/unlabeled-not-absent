@@ -1,6 +1,61 @@
 # Unlabeled Does Not Mean Absent: Improving Marine Organism Detection under Incomplete Deep Sea Image Annotations
 
-> A runnable first proof of concept is available in [PROTOTYPE.md](PROTOTYPE.md).
+> A runnable proof of concept is available in [PROTOTYPE.md](PROTOTYPE.md). It can download a small FathomNet sample, run YOLO, compare detections with existing annotations, create manual-review artifacts, and optionally use candidate boxes as SAM 3 prompts.
+
+## Current Prototype
+
+The implemented workflow is:
+
+```text
+FathomNet sample
+    -> YOLO detections
+    -> class-agnostic IoU comparison with existing FathomNet boxes
+    -> unmatched missing-annotation candidates
+    -> optional SAM 3 boundary refinement
+    -> manual review
+```
+
+Install the lightweight downloader and visualization tools:
+
+```powershell
+python -m pip install -e .
+```
+
+Install YOLO support and run the pipeline:
+
+```powershell
+python -m pip install -e ".[yolo]"
+una-poc fetch --pages 10,11,12 --page-size 10 --limit 6 --output data/poc
+una-poc detect --manifest data/poc/manifest.json --model yolo11n.pt --output data/poc/yolo
+```
+
+The default `yolo11n.pt` checkpoint is useful for verifying that the software pipeline works, but it is trained on generic COCO categories. It must not be treated as a valid marine-organism model. Research results should use a checkpoint fine-tuned or otherwise validated for the selected FathomNet categories:
+
+```powershell
+una-poc detect `
+  --manifest data/poc/manifest.json `
+  --model path/to/fathomnet-model.pt `
+  --confidence 0.4 `
+  --overlap-iou 0.1 `
+  --output data/poc/yolo
+```
+
+YOLO outputs include `results.json`, one overlay per image, and a candidate contact sheet when unmatched detections exist. Blue boxes are existing annotations, green detections overlap an annotation, and red detections are review candidates. The source manifest is never modified.
+
+To use the candidate detections as SAM 3 prompts after completing the separate SAM 3 GPU setup described in [PROTOTYPE.md](PROTOTYPE.md):
+
+```powershell
+una-poc segment `
+  --manifest data/poc/manifest.json `
+  --detections data/poc/yolo/results.json `
+  --output data/poc/sam3
+```
+
+An unmatched detection is not proof of a missing label. It is a candidate for manual or expert review. Matching is deliberately class-agnostic because a YOLO checkpoint and FathomNet may name equivalent organisms differently.
+
+YOLO support uses the third-party Ultralytics package. Review the
+[Ultralytics license options](https://www.ultralytics.com/license) before
+redistributing the combined software or using it commercially.
 
 ## Project Goals
 

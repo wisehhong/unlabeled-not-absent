@@ -56,6 +56,8 @@ def run_sam3(
     confidence_threshold: float = 0.3,
     max_images: int | None = None,
     max_boxes_per_image: int | None = None,
+    detections_path: Path | None = None,
+    include_overlapping_detections: bool = False,
 ) -> Path:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     sample_dir = manifest_path.parent
@@ -66,6 +68,12 @@ def run_sam3(
     overlays_dir.mkdir(parents=True, exist_ok=True)
     processor = _load_sam3(confidence_threshold)
     results: list[dict[str, Any]] = []
+    detection_images: dict[str, dict[str, Any]] = {}
+    if detections_path:
+        detection_payload = json.loads(Path(detections_path).read_text(encoding="utf-8"))
+        detection_images = {
+            item["image_uuid"]: item for item in detection_payload.get("images", [])
+        }
 
     records = manifest["images"][:max_images]
     for record in records:
@@ -73,7 +81,23 @@ def run_sam3(
             image = loaded.convert("RGB")
         state = processor.set_image(image)
         visual_masks: list[tuple[str, np.ndarray]] = []
-        boxes = record["bounding_boxes"][:max_boxes_per_image]
+        if detections_path:
+            predictions = detection_images.get(record["uuid"], {}).get("predictions", [])
+            if not include_overlapping_detections:
+                predictions = [
+                    item for item in predictions if item["status"] == "missing_annotation_candidate"
+                ]
+            boxes = [
+                {
+                    **item,
+                    "uuid": item.get("prediction_id"),
+                    "concept": item.get("label"),
+                }
+                for item in predictions
+            ]
+        else:
+            boxes = record["bounding_boxes"]
+        boxes = boxes[:max_boxes_per_image]
         for box in boxes:
             processor.reset_all_prompts(state)
             prompt = normalize_xywh(box, image.width, image.height)
@@ -117,8 +141,15 @@ def run_sam3(
         json.dumps(
             {
                 "manifest": str(manifest_path),
+                "detections": str(detections_path) if detections_path else None,
                 "confidence_threshold": confidence_threshold,
-                "method": "SAM 3 positive visual box prompt on each existing FathomNet box",
+                "method": (
+                    "SAM 3 positive visual box prompt on YOLO review candidates"
+                    if detections_path and not include_overlapping_detections
+                    else "SAM 3 positive visual box prompt on YOLO detections"
+                    if detections_path
+                    else "SAM 3 positive visual box prompt on each existing FathomNet box"
+                ),
                 "results": results,
             },
             indent=2,
@@ -126,4 +157,3 @@ def run_sam3(
         encoding="utf-8",
     )
     return result_path
-

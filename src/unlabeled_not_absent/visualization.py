@@ -68,3 +68,68 @@ def create_review_artifacts(manifest: dict[str, Any], output_dir: Path) -> None:
         draw.text((left, top), caption, fill="black")
     sheet.save(output_dir / "contact_sheet.jpg", quality=92)
 
+
+def draw_yolo_review(
+    image: Image.Image,
+    annotations: list[dict[str, Any]],
+    predictions: list[dict[str, Any]],
+) -> Image.Image:
+    """Draw ground-truth boxes and visually distinct YOLO review candidates."""
+    result = image.convert("RGB").copy()
+    draw = ImageDraw.Draw(result)
+    font = ImageFont.load_default()
+    scale = max(2, round(max(result.size) / 1000))
+    for box in annotations:
+        x, y = float(box["x"]), float(box["y"])
+        x2, y2 = x + float(box["width"]), y + float(box["height"])
+        draw.rectangle((x, y, x2, y2), outline=(60, 160, 255), width=scale)
+    for prediction in predictions:
+        x, y = float(prediction["x"]), float(prediction["y"])
+        x2 = x + float(prediction["width"])
+        y2 = y + float(prediction["height"])
+        candidate = prediction["status"] == "missing_annotation_candidate"
+        color = (255, 80, 70) if candidate else (80, 220, 120)
+        label = f"YOLO {prediction['label']} {prediction['confidence']:.2f}"
+        draw.rectangle((x, y, x2, y2), outline=color, width=scale)
+        text_box = draw.textbbox((x, y), label, font=font, stroke_width=1)
+        draw.rectangle(text_box, fill=color)
+        draw.text((x, y), label, fill="black", font=font, stroke_width=1, stroke_fill=color)
+    return result
+
+
+def create_yolo_review_artifacts(
+    manifest: dict[str, Any],
+    results: dict[str, Any],
+    sample_dir: Path,
+    output_dir: Path,
+) -> None:
+    """Write per-image overlays and a candidate-only contact sheet."""
+    records = {record["uuid"]: record for record in manifest["images"]}
+    overlays_dir = output_dir / "overlays"
+    overlays_dir.mkdir(parents=True, exist_ok=True)
+    thumbnails: list[tuple[Image.Image, str]] = []
+    for image_result in results["images"]:
+        record = records[image_result["image_uuid"]]
+        with Image.open(sample_dir / record["local_file"]) as image:
+            overlay = draw_yolo_review(
+                image, record.get("bounding_boxes") or [], image_result["predictions"]
+            )
+        overlay.save(overlays_dir / f"{record['uuid']}.jpg", quality=92)
+        if image_result["candidate_count"]:
+            overlay.thumbnail((640, 400))
+            thumbnails.append(
+                (overlay.copy(), f"{record['uuid'][:8]} | {image_result['candidate_count']} candidates")
+            )
+    if not thumbnails:
+        return
+    cell_w, cell_h = 660, 440
+    columns = 2 if len(thumbnails) > 1 else 1
+    rows = (len(thumbnails) + columns - 1) // columns
+    sheet = Image.new("RGB", (cell_w * columns, cell_h * rows), "white")
+    draw = ImageDraw.Draw(sheet)
+    for index, (thumbnail, caption) in enumerate(thumbnails):
+        left = (index % columns) * cell_w + 10
+        top = (index // columns) * cell_h + 10
+        sheet.paste(thumbnail, (left, top + 20))
+        draw.text((left, top), caption, fill="black")
+    sheet.save(output_dir / "candidate_contact_sheet.jpg", quality=92)
