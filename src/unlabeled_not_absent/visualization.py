@@ -54,19 +54,21 @@ def create_review_artifacts(manifest: dict[str, Any], output_dir: Path) -> None:
             evidence = ", ".join(record["habitat_review"]["heuristic_evidence"]) or "no benthic indicator"
             thumbnails.append((preview.copy(), f"{record['uuid'][:8]}  |  {evidence}"))
 
-    if not thumbnails:
-        return
-    cell_w, cell_h = 660, 440
-    columns = 2 if len(thumbnails) > 1 else 1
-    rows = (len(thumbnails) + columns - 1) // columns
-    sheet = Image.new("RGB", (cell_w * columns, cell_h * rows), "white")
-    draw = ImageDraw.Draw(sheet)
-    for index, (thumbnail, caption) in enumerate(thumbnails):
-        left = (index % columns) * cell_w + 10
-        top = (index // columns) * cell_h + 10
-        sheet.paste(thumbnail, (left, top + 20))
-        draw.text((left, top), caption, fill="black")
-    sheet.save(output_dir / "contact_sheet.jpg", quality=92)
+    # this is not scalable. commenting out for now. we can add a flag to enable it if needed.
+
+    # if not thumbnails:
+    #     return
+    # cell_w, cell_h = 660, 440
+    # columns = 2 if len(thumbnails) > 1 else 1
+    # rows = (len(thumbnails) + columns - 1) // columns
+    # sheet = Image.new("RGB", (cell_w * columns, cell_h * rows), "white")
+    # draw = ImageDraw.Draw(sheet)
+    # for index, (thumbnail, caption) in enumerate(thumbnails):
+    #     left = (index % columns) * cell_w + 10
+    #     top = (index // columns) * cell_h + 10
+    #     sheet.paste(thumbnail, (left, top + 20))
+    #     draw.text((left, top), caption, fill="black")
+    # sheet.save(output_dir / "contact_sheet.jpg", quality=92)
 
 
 def draw_yolo_review(
@@ -120,16 +122,19 @@ def create_yolo_review_artifacts(
             thumbnails.append(
                 (overlay.copy(), f"{record['uuid'][:8]} | {image_result['candidate_count']} candidates")
             )
-    if not thumbnails:
-        return
-    cell_w, cell_h = 660, 440
-    columns = 2 if len(thumbnails) > 1 else 1
-    rows = (len(thumbnails) + columns - 1) // columns
-    sheet = Image.new("RGB", (cell_w * columns, cell_h * rows), "white")
-    draw = ImageDraw.Draw(sheet)
-    for index, (thumbnail, caption) in enumerate(thumbnails):
-        left = (index % columns) * cell_w + 10
-        top = (index // columns) * cell_h + 10
-        sheet.paste(thumbnail, (left, top + 20))
-        draw.text((left, top), caption, fill="black")
-    sheet.save(output_dir / "candidate_contact_sheet.jpg", quality=92)
+
+    # this is not scalable. commenting out for now. we can add a flag to enable it if needed.
+
+    # if not thumbnails:
+    #     return
+    # cell_w, cell_h = 660, 440
+    # columns = 2 if len(thumbnails) > 1 else 1
+    # rows = (len(thumbnails) + columns - 1) // columns
+    # sheet = Image.new("RGB", (cell_w * columns, cell_h * rows), "white")
+    # draw = ImageDraw.Draw(sheet)
+    # for index, (thumbnail, caption) in enumerate(thumbnails):
+    #     left = (index % columns) * cell_w + 10
+    #     top = (index // columns) * cell_h + 10
+    #     sheet.paste(thumbnail, (left, top + 20))
+    #     draw.text((left, top), caption, fill="black")
+    # sheet.save(output_dir / "candidate_contact_sheet.jpg", quality=92)
