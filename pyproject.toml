@@ -24,4 +24,4 @@ una-poc = "unlabeled_not_absent.cli:main"
 where = ["src", "prototype/src"]
 
 [tool.pytest.ini_options]
-testpaths = ["prototype/tests"]
+testpaths = ["tests", "prototype/tests"]
