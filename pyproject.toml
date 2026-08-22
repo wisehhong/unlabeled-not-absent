@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "unlabeled-not-absent"
 version = "0.2.0"
 description = "FathomNet incomplete-annotation audit prototype with YOLO and SAM 3"
-readme = "PROTOTYPE.md"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "certifi>=2024.7.4",
@@ -21,4 +21,7 @@ yolo = ["ultralytics>=8.3"]
 una-poc = "unlabeled_not_absent.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["prototype/src"]
+
+[tool.pytest.ini_options]
+testpaths = ["prototype/tests"]
