@@ -152,7 +152,8 @@ class PrototypeTests(unittest.TestCase):
             payload = json.loads(result_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["summary"]["missing_annotation_candidates"], 1)
             self.assertTrue((root / "yolo" / "overlays" / "sample.jpg").exists())
-            self.assertTrue((root / "yolo" / "candidate_contact_sheet.jpg").exists())
+            # Contact sheets were intentionally disabled in 5df12e3 as not scalable.
+            self.assertFalse((root / "yolo" / "candidate_contact_sheet.jpg").exists())
 
     @patch("unlabeled_not_absent.sampling.fetch_image_page")
     def test_collect_candidates_filters_non_benthic(self, fetch):
@@ -220,7 +221,8 @@ class PrototypeTests(unittest.TestCase):
             image_path.parent.mkdir()
             Image.new("RGB", (100, 100), "navy").save(image_path)
             create_review_artifacts(manifest, root)
-            self.assertTrue((root / "contact_sheet.jpg").exists())
+            # Contact sheets were intentionally disabled in 5df12e3 as not scalable.
+            self.assertFalse((root / "contact_sheet.jpg").exists())
 
     @staticmethod
     def _image(uuid, concept):
