@@ -1,0 +1,4 @@
+coco-lib>=0.3.0
+tenacity>=9.1.2
+httpx[http2]>=0.28.1
+tqdm>=4.67.1
