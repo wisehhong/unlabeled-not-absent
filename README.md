@@ -1,73 +1,94 @@
 # Unlabeled Does Not Mean Absent: Improving Marine Organism Detection under Incomplete Deep Sea Image Annotations
 
-> A runnable proof of concept is available in [PROTOTYPE.md](PROTOTYPE.md). It can download a small FathomNet sample, run YOLO, compare detections with existing annotations, create manual-review artifacts, and optionally use candidate boxes as SAM 3 prompts.
+This project studies object detection when the training annotations are known to be
+incomplete: marine biologists label only the taxa relevant to their study, so an
+unlabeled organism is usually *present but ignored*, not absent.
 
-## Current Prototype
+The work is grounded in **FathomNetCLEF2026** (CVPR FGVC13 / LifeCLEF 2026),
+"Positive-Unlabeled Object Detection in Marine Images", which poses exactly this
+problem on 6,463 training images with 22,225 boxes across 32 taxa.
 
-The implemented workflow is:
+## Repository layout
 
 ```text
-FathomNet sample
-    -> YOLO detections
-    -> class-agnostic IoU comparison with existing FathomNet boxes
-    -> unmatched missing-annotation candidates
-    -> optional SAM 3 boundary refinement
-    -> manual review
+fathomnet-2026/    Organizer-provided COCO files and official downloader (unmodified)
+src/una/           Current research pipeline
+prototype/         Original proof of concept, preserved and still runnable
+tests/             Tests for the current pipeline
 ```
 
-Install the lightweight downloader and visualization tools:
+The earlier proof of concept lives in [prototype/PROTOTYPE.md](prototype/PROTOTYPE.md)
+and remains installable as `una-poc`. It established the core idea this project builds
+on: compare detections against existing boxes class-agnostically, and treat unmatched
+detections as *review candidates rather than errors*.
+
+## Data layout
+
+Images are large (~55 GB) and are deliberately kept **outside** the repository so that
+git worktrees stay disposable and the same checkout works on every machine. The data
+root resolves in this order:
+
+1. the `UNA_DATA_ROOT` environment variable
+2. the `data_root` key in `una.config.json` at the repository root (gitignored)
+3. `<repo>/data`
+
+```jsonc
+// una.config.json
+{ "data_root": "C:/Users/you/Documents/Dev/fathomnet-data" }
+```
+
+## Getting the images
+
+Downloading is a separate, resumable step, so that training and evaluation code never
+mixes network failures into experimental results. Use the organizers' downloader:
+
+```powershell
+python -m pip install -r fathomnet-2026/requirements.txt
+python fathomnet-2026/download.py fathomnet-2026/test_dataset.json  -o <data_root>/images/test
+python fathomnet-2026/download.py fathomnet-2026/train_dataset.json -o <data_root>/images/train
+```
+
+On Windows, set `PYTHONUTF8=1` first; the downloader prints emoji that the default
+cp1252 console encoding cannot represent.
+
+## Commands
 
 ```powershell
 python -m pip install -e .
+
+una paths              # show every resolved path for this machine
+una summary            # normalized statistics for both COCO splits
+una doctor             # check downloaded images against the manifest
+una doctor --verify    # additionally decode each image and check its dimensions
 ```
 
-Install YOLO support and run the pipeline:
+`una doctor` exits non-zero when a split is incomplete. This matters more than it
+looks: a partial download is *biased*, not random, because large 4K SOI frames time out
+while small HURL images succeed. Since institution correlates with habitat, camera and
+annotation style, a silently partial download changes what the model learns while every
+downstream number still looks plausible.
 
-```powershell
-python -m pip install -e ".[yolo]"
-una-poc fetch --pages 10,11,12 --page-size 10 --limit 6 --output data/poc
-una-poc detect --manifest data/poc/manifest.json --model yolo11n.pt --output data/poc/yolo
-```
+## Dataset handling notes
 
-The CLI provides four commands:
+The organizer COCO files contain four traps that `src/una/coco.py` neutralizes:
 
-```powershell
-# Download images from specific FathomNet API pages.
-una-poc fetch --pages 10,11,12 --page-size 10 --limit 6 --output data/poc
+| Trap | Consequence if ignored |
+|---|---|
+| `file_name` is a FathomNet UUID, never the URL basename | Images cannot be joined to their records |
+| `image_id` collides across the two splits (1,405 ids) | Train and test annotations silently merge |
+| `category_id` spans 1..41 with 9 gaps and is not a class index | Off-by-N class predictions in submissions |
+| `flickr_url` duplicates `coco_url` byte for byte | Harmless, but ignored |
 
-# Download images from a deterministic random sample of API pages.
-una-poc fetch-random --seed 42 --page-count 8 --page-size 10 --limit 6 --output data/poc-random
+Provenance is recovered from image URLs because **a random train/validation split leaks
+data**. One SOI dive alone is 18% of the training images as consecutive framegrabs, and
+`_PART02` / `_PART04` directories are the same dive: the 21 source directories collapse
+to 17 real dives. Splits must be grouped by dive.
 
-# Run YOLO and flag detections that do not overlap existing annotations.
-una-poc detect --manifest data/poc/manifest.json --model yolo11n.pt --output data/poc/yolo
+Train and test are also a complete cross-institution domain shift — train is SOI, NOAA
+and HURL; test is 100% MBARI — so validation on held-out training dives will read
+optimistically compared with the competition test set.
 
-# Refine YOLO candidate boxes with SAM 3.
-una-poc segment --manifest data/poc/manifest.json --detections data/poc/yolo/results.json --output data/poc/sam3
-```
-
-The default `yolo11n.pt` checkpoint is useful for verifying that the software pipeline works, but it is trained on generic COCO categories. It must not be treated as a valid marine-organism model. Research results should use a checkpoint fine-tuned or otherwise validated for the selected FathomNet categories:
-
-```powershell
-una-poc detect `
-  --manifest data/poc/manifest.json `
-  --model path/to/fathomnet-model.pt `
-  --confidence 0.4 `
-  --overlap-iou 0.1 `
-  --output data/poc/yolo
-```
-
-YOLO outputs include `results.json`, one overlay per image, and a candidate contact sheet when unmatched detections exist. Blue boxes are existing annotations, green detections overlap an annotation, and red detections are review candidates. The source manifest is never modified.
-
-To use the candidate detections as SAM 3 prompts after completing the separate SAM 3 GPU setup described in [PROTOTYPE.md](PROTOTYPE.md):
-
-```powershell
-una-poc segment `
-  --manifest data/poc/manifest.json `
-  --detections data/poc/yolo/results.json `
-  --output data/poc/sam3
-```
-
-An unmatched detection is not proof of a missing label. It is a candidate for manual or expert review. Matching is deliberately class-agnostic because a YOLO checkpoint and FathomNet may name equivalent organisms differently.
+## Licensing
 
 YOLO support uses the third-party Ultralytics package. Review the
 [Ultralytics license options](https://www.ultralytics.com/license) before
