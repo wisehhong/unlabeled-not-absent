@@ -21,7 +21,7 @@ yolo = ["ultralytics>=8.3"]
 una-poc = "unlabeled_not_absent.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["prototype/src"]
+where = ["src", "prototype/src"]
 
 [tool.pytest.ini_options]
 testpaths = ["prototype/tests"]

@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 .testdeps/
 data/
+
+# Machine-specific data root; each machine writes its own.
+una.config.json
