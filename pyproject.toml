@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unlabeled-not-absent"
-version = "0.2.0"
-description = "FathomNet incomplete-annotation audit prototype with YOLO and SAM 3"
+version = "0.3.0"
+description = "Positive-unlabeled marine organism detection on the FathomNetCLEF2026 benchmark"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
   "certifi>=2024.7.4",
   "numpy>=1.26",
@@ -16,8 +16,10 @@ dependencies = [
 
 [project.optional-dependencies]
 yolo = ["ultralytics>=8.3"]
+prototype = ["ultralytics>=8.3"]
 
 [project.scripts]
+una = "una.cli:main"
 una-poc = "unlabeled_not_absent.cli:main"
 
 [tool.setuptools.packages.find]
