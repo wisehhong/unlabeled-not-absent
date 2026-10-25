@@ -7,3 +7,6 @@ data/
 
 # Machine-specific data root; each machine writes its own.
 una.config.json
+
+# Pretrained weights downloaded by Ultralytics into the working directory.
+*.pt
