@@ -68,6 +68,25 @@ while small HURL images succeed. Since institution correlates with habitat, came
 annotation style, a silently partial download changes what the model learns while every
 downstream number still looks plausible.
 
+## YOLO baseline and Kaggle submission
+
+A plain supervised baseline (unlabeled organisms treated as background) that exercises
+the full submission flow. Install the extras first:
+`python -m pip install -e .[yolo]` plus a CUDA build of PyTorch.
+
+```powershell
+una yolo-export        # resize train images to max side 1280, YOLO labels, dive-grouped val split
+una train              # yolo11s, imgsz 1024, 30 epochs -> <data_root>/runs/yolo11s-baseline
+una predict            # test split, conf=0.001, max_det=300 -> test_predictions.json
+una submission         # -> submission.csv with original image_id and category_id
+
+kaggle competitions submit -c fathomnet-2026 -f <data_root>/runs/yolo11s-baseline/submission.csv -m "yolo11s baseline"
+```
+
+The CSV columns are `annotation_id,image_id,category_id,bbox_x,bbox_y,bbox_width,bbox_height,score`
+with COCO pixel `xywh` boxes; the metric is mAP@[.5:.95]. The very low confidence
+threshold is intentional, since low-score boxes can only add to mAP.
+
 ## Dataset handling notes
 
 The organizer COCO files contain four traps that `src/una/coco.py` neutralizes:
