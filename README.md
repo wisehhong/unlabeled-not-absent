@@ -14,6 +14,7 @@ problem on 6,463 training images with 22,225 boxes across 32 taxa.
 fathomnet-2026/    Organizer-provided COCO files and official downloader (unmodified)
 src/una/           Current research pipeline
 prototype/         Original proof of concept, preserved and still runnable
+reports/           Experiment reports with results and analysis
 tests/             Tests for the current pipeline
 ```
 
@@ -86,6 +87,9 @@ kaggle competitions submit -c fathomnet-2026 -f <data_root>/runs/yolo11s-baselin
 The CSV columns are `annotation_id,image_id,category_id,bbox_x,bbox_y,bbox_width,bbox_height,score`
 with COCO pixel `xywh` boxes; the metric is mAP@[.5:.95]. The very low confidence
 threshold is intentional, since low-score boxes can only add to mAP.
+
+Results and analysis: [reports/2026-10-yolo11s-baseline.md](reports/2026-10-yolo11s-baseline.md)
+(Kaggle public 0.0371 / private 0.0321).
 
 ## Dataset handling notes
 
