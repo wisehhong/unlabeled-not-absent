@@ -91,6 +91,11 @@ threshold is intentional, since low-score boxes can only add to mAP.
 Results and analysis: [reports/2026-10-yolo11s-baseline.md](reports/2026-10-yolo11s-baseline.md)
 (Kaggle public 0.0371 / private 0.0321).
 
+Fine-tuning [MBARI-315k-YOLOv8x](https://huggingface.co/FathomNet/MBARI-315k-yolov8)
+(`una train --model <data_root>/weights/mbari_315k_yolov8.pt --batch 6 --name mbari315k-yolov8x`)
+roughly doubles the score: [reports/2026-10-mbari315k-yolov8x.md](reports/2026-10-mbari315k-yolov8x.md)
+(Kaggle public 0.0767 / private 0.0668).
+
 ## Dataset handling notes
 
 The organizer COCO files contain four traps that `src/una/coco.py` neutralizes:
